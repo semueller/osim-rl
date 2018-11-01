@@ -262,13 +262,13 @@ class Spec(object):
         self.timestep_limit = 300
 
 ## OpenAI interface
-# The amin purpose of this class is to provide wrap all 
+# The main purpose of this class is to provide wrap all
 # the functions of OpenAI gym. It is still an abstract
 # class but closer to OpenSim. The actual classes of
 # environments inherit from this one and:
 # - select the model file
 # - define the rewards and stopping conditions
-# - define an obsernvation as a function of state
+# - define an observation as a function of state
 class OsimEnv(gym.Env):
     action_space = None
     observation_space = None
@@ -286,7 +286,7 @@ class OsimEnv(gym.Env):
 
     metadata = {
         'render.modes': ['human'],
-        'video.frames_per_second' : None
+        'video.frames_per_second': None
     }
 
     def reward(self):
@@ -334,6 +334,8 @@ class OsimEnv(gym.Env):
     def get_action_space_size(self):
         return self.osim_model.get_action_space_size()
 
+    '''Gym.Env API:'''
+
     def reset(self, project = True):
         self.osim_model.reset()
         
@@ -364,7 +366,6 @@ class L2RunEnv(OsimEnv):
         state_desc = self.get_state_desc()
         return state_desc["body_pos"]["pelvis"][1] < 0.6
 
-    ## Values in the observation vector
     def get_observation(self):
         state_desc = self.get_state_desc()
 
@@ -389,14 +390,69 @@ class L2RunEnv(OsimEnv):
         return res
 
     def get_observation_space_size(self):
-        return 41
+        # return 41  #  semueller ? .get_observation() returns res with length 43
+        # return 43
+        # return len(self.get_observation())  # semueller # this throws when osim_model not initialized
+        return 43
 
     def reward(self):
         state_desc = self.get_state_desc()
         prev_state_desc = self.get_prev_state_desc()
         if not prev_state_desc:
             return 0
-        return state_desc["joint_pos"]["ground_pelvis"][1] - prev_state_desc["joint_pos"]["ground_pelvis"][1]
+        reward = state_desc["joint_pos"]["ground_pelvis"][1] - prev_state_desc["joint_pos"]["ground_pelvis"][1]
+        return reward
+
+class L2RunEnvHER(L2RunEnv):  # semueller
+    goal = None  # to be set when in training with HER
+    tolerance = 1e-2
+
+    def get_observation(self):
+        observation = super(L2RunEnvHER, self).get_observation()
+        if self.goal is None:
+            desired_goal = np.array([0]*len(observation))
+        else:
+            desired_goal = list(self.goal)
+        return {  # do we need to concatenate at this point? or does "HER" do this later for us?
+            'observation': np.array(observation + [0]*len(observation)),
+            'desired_goal': desired_goal,
+            'achieved_goal': np.array(observation)
+        }
+
+    def get_observation_space_size(self):
+        return 86
+        # return self.get_observation()['observation'].shape[0]
+
+    @staticmethod
+    def pose_metric(p1, p2):
+        ''':return: squared euclidean of np.arrays p1 and p2'''
+        return np.sum(np.square((p1-p2)))
+
+    def reward(self):
+        obs = self.get_observation()
+        diff = self.pose_metric(obs['desired_goal'], obs['achieved_goal'])
+        return 1 if diff <= self.tolerance \
+            else 0
+
+    def compute_reward(self, achieved_goal, desired_goal, info):  # for configure_her reward_fun expects attr env.compute_reward
+        print("compute_reward")
+        assert achieved_goal.shape == desired_goal.shape
+        if achieved_goal.shape[0] == 1:  # if we get a single vector instead of a batch
+            achieved_goal = [achieved_goal]
+            desired_goal = [desired_goal]
+        # diffs = np.vectorize(self.pose_metric)(achieved_goal, desired_goal)
+        diffs = np.array([self.pose_metric(x,y) for x, y in zip(achieved_goal, desired_goal)])
+        res = (diffs <= self.tolerance).astype(np.float32)
+        return res
+
+    # are the following two functions necessary?
+    # as in eg class HandReachEnv(HandEnv(gym.GoalEnv))
+    def _get_achieved_goal(self):
+        return np.array(super(L2RunEnvHER, self).get_observation()).flatten()
+
+    def _is_success(self, achieved_goal, desired_goal):  # necessary?
+        return (self.pose_metric(achieved_goal, desired_goal) <= self.tolerance).astype(np.float32)
+
 
 def rect(row):
     r = row[0]
