@@ -93,7 +93,7 @@ class OsimModel(object):
         if np.any(np.isnan(action)):
             raise ValueError("NaN passed in the activation vector. Values in [0,1] interval are required.")
 
-        # TODO: Check if actions within [0,1]
+        action = np.clip(np.array(action), 0.0, 1.0)
         self.last_action = action
             
         brain = opensim.PrescribedController.safeDownCast(self.model.getControllerSet().get(0))
@@ -476,7 +476,7 @@ class ProstheticsEnv(OsimEnv):
             self.time_limit = 1000
         self.spec.timestep_limit = self.time_limit    
 
-    def __init__(self, visualize = True, integrator_accuracy = 5e-5, difficulty=0, seed=0):
+    def __init__(self, visualize = True, integrator_accuracy = 5e-5, difficulty=0, seed=0, report=None):
         self.model_paths = {}
         self.model_paths["3D_pros"] = os.path.join(os.path.dirname(__file__), '../models/gait14dof22musc_pros_20180507.osim')    
         self.model_paths["3D"] = os.path.join(os.path.dirname(__file__), '../models/gait14dof22musc_20170320.osim')    
@@ -486,6 +486,14 @@ class ProstheticsEnv(OsimEnv):
         super(ProstheticsEnv, self).__init__(visualize = visualize, integrator_accuracy = integrator_accuracy)
         self.set_difficulty(difficulty)
         random.seed(seed)
+        np.random.seed(seed)
+
+        if report:
+            bufsize = 0
+            self.observations_file = open("%s-obs.csv" % (report,),"w", bufsize)
+            self.actions_file = open("%s-act.csv" % (report,),"w", bufsize)
+            self.get_headers()
+
 
     def change_model(self, model='3D', prosthetic=True, difficulty=0, seed=0):
         if (self.model, self.prosthetic) != (model, prosthetic):
@@ -493,6 +501,7 @@ class ProstheticsEnv(OsimEnv):
             self.load_model(self.model_paths[self.get_model_key()])
         self.set_difficulty(difficulty)
         random.seed(seed)
+        np.random.seed(seed)
     
     def is_done(self):
         state_desc = self.get_state_desc()
@@ -580,7 +589,10 @@ class ProstheticsEnv(OsimEnv):
             d["target_vel"] = self.targets[self.osim_model.istep,:].tolist()
         return d
 
-    def reset(self, project = True):
+    def reset(self, project = True, seed = None):
+        if seed:
+            random.seed(seed)
+            np.random.seed(seed)
         self.generate_new_targets()
         return super(ProstheticsEnv, self).reset(project = project)
 
