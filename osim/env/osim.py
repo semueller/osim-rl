@@ -410,12 +410,12 @@ class L2RunEnvHER(L2RunEnv):  # semueller
     def get_observation(self):
         observation = super(L2RunEnvHER, self).get_observation()
         if self.goal is None:
-            desired_goal = np.array([0]*len(observation))
+            desired_goal = [0]*len(observation)
         else:
             desired_goal = list(self.goal)
         return {  # do we need to concatenate at this point? or does "HER" do this later for us?
-            'observation': np.array(observation + [0]*len(observation)),
-            'desired_goal': desired_goal,
+            'observation': np.array(observation + desired_goal),
+            'desired_goal': np.array(desired_goal),
             'achieved_goal': np.array(observation)
         }
 
@@ -435,7 +435,7 @@ class L2RunEnvHER(L2RunEnv):  # semueller
             else 0
 
     def compute_reward(self, achieved_goal, desired_goal, info):  # for configure_her reward_fun expects attr env.compute_reward
-        print("compute_reward")
+        # print("compute_reward")
         assert achieved_goal.shape == desired_goal.shape
         if achieved_goal.shape[0] == 1:  # if we get a single vector instead of a batch
             achieved_goal = [achieved_goal]
