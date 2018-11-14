@@ -359,6 +359,7 @@ class OsimEnv(gym.Env):
         return
 
 class L2RunEnv(OsimEnv):
+
     model_path = os.path.join(os.path.dirname(__file__), '../models/gait9dof18musc.osim')    
     time_limit = 1000
 
@@ -407,20 +408,57 @@ class L2RunEnvHER(L2RunEnv):  # semueller
     goal = None  # to be set when in training with HER
     tolerance = 1e-2
 
+    def __init__(self, visualize = True, integrator_accuracy = 5e-5, goaltype=''):
+        self.goaltype = None
+
+        if goaltype == 'pos':
+            self.get_achieved_goal = self.goal_pos
+            self.observation_size = 43+14
+        elif goaltype == 'mass':
+            self.get_achieved_goal = self.goal_mass
+            self.observation_size = 43+3
+        elif goaltype == 'pos_mass':
+            self.get_achieved_goal = self.goal_pos_mass
+            self.observation_size = 43+14+3
+        else:
+            print("no specific goaltype given, goaltype was '{}'".format(goaltype))
+            self.get_achieved_goal = self.goal_default
+            self.observation_size = 43+43
+        #  Default contstructor needs observation_space_size to be set
+        super(L2RunEnvHER, self).__init__(visualize, integrator_accuracy)
+
+    def goal_pos(self):
+        state_desc = self.get_state_desc()
+        res = []
+        for body_part in ["head", "pelvis", "torso", "toes_l", "toes_r", "talus_l", "talus_r"]:
+            res += state_desc["body_pos"][body_part][0:2]
+        return res
+
+    def goal_mass(self):
+        state_desc = self.get_state_desc()
+        return state_desc["misc"]["mass_center_pos"]
+
+    def goal_pos_mass(self):
+        return self.goal_pos()+self.goal_mass()
+
+    def goal_default(self):
+        return super(L2RunEnvHER, self).get_observation()
+
     def get_observation(self):
         observation = super(L2RunEnvHER, self).get_observation()
+        achieved_goal = self.get_achieved_goal()
         if self.goal is None:
-            desired_goal = [0]*len(observation)
+            desired_goal = [0]*len(achieved_goal)
         else:
             desired_goal = list(self.goal)
         return {  # do we need to concatenate at this point? or does "HER" do this later for us?
             'observation': np.array(observation + desired_goal),
             'desired_goal': np.array(desired_goal),
-            'achieved_goal': np.array(observation)
+            'achieved_goal': np.array(achieved_goal)
         }
 
     def get_observation_space_size(self):
-        return 86
+        return self.observation_size
         # return self.get_observation()['observation'].shape[0]
 
     @staticmethod
