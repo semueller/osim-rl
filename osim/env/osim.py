@@ -412,37 +412,44 @@ class L2RunEnvHER(L2RunEnv):  # semueller
         self.goaltype = None
 
         if goaltype == 'pos':
-            self.get_achieved_goal = self.goal_pos
-            self.observation_size = 43+14
+            self.get_achieved_goal = self._goal_pos
+            self.observation_size = 43
         elif goaltype == 'mass':
-            self.get_achieved_goal = self.goal_mass
-            self.observation_size = 43+3
+            self.get_achieved_goal = self._goal_mass
+            self.observation_size = 43
         elif goaltype == 'pos_mass':
-            self.get_achieved_goal = self.goal_pos_mass
-            self.observation_size = 43+14+3
+            self.get_achieved_goal = self._goal_pos_mass
+            self.observation_size = 43
         else:
             print("no specific goaltype given, goaltype was '{}'".format(goaltype))
-            self.get_achieved_goal = self.goal_default
-            self.observation_size = 43+43
+            self.get_achieved_goal = self._goal_default
+            self.observation_size = 43
         #  Default contstructor needs observation_space_size to be set
         super(L2RunEnvHER, self).__init__(visualize, integrator_accuracy)
 
-    def goal_pos(self):
-        state_desc = self.get_state_desc()
+    def _goal_pos(self, state_desc=None):
+        if state_desc is None:
+            state_desc = self.get_state_desc()
         res = []
         for body_part in ["head", "pelvis", "torso", "toes_l", "toes_r", "talus_l", "talus_r"]:
             res += state_desc["body_pos"][body_part][0:2]
         return res
 
-    def goal_mass(self):
-        state_desc = self.get_state_desc()
+    def _goal_mass(self, state_desc=None):
+        if state_desc is None:
+            state_desc = self.get_state_desc()
         return state_desc["misc"]["mass_center_pos"]
 
-    def goal_pos_mass(self):
-        return self.goal_pos()+self.goal_mass()
+    def _goal_pos_mass(self, state_desc=None):
+        return self._goal_pos(state_desc)+self._goal_mass(state_desc)
 
-    def goal_default(self):
+    def _goal_default(self, state_desc=None):
+        if state_desc is not None:
+            return state_desc
         return super(L2RunEnvHER, self).get_observation()
+
+    def state_to_goal(self, state):
+        return self.get_achieved_goal(state)
 
     def get_observation(self):
         observation = super(L2RunEnvHER, self).get_observation()
@@ -451,8 +458,8 @@ class L2RunEnvHER(L2RunEnv):  # semueller
             desired_goal = [0]*len(achieved_goal)
         else:
             desired_goal = list(self.goal)
-        return {  # do we need to concatenate at this point? or does "HER" do this later for us?
-            'observation': np.array(observation + desired_goal),
+        return {  # do we need to concatenate at this point? or does "HER" do this later for us? -> actor_critic.py
+            'observation': np.array(observation),
             'desired_goal': np.array(desired_goal),
             'achieved_goal': np.array(achieved_goal)
         }
