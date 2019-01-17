@@ -44,7 +44,7 @@ class OsimModel(object):
         self.brain = opensim.PrescribedController()
 
         # Enable the visualizer
-        self.model.setUseVisualizer(visualize)
+        self.model.setUseVisualizer(False)
 
         self.muscleSet = self.model.getMuscles()
         self.forceSet = self.model.getForceSet()
@@ -352,7 +352,7 @@ class OsimEnv(gym.Env):
             obs = self.get_observation()
         else:
             obs = self.get_state_desc()
-            
+
         return [ obs, self.reward(), self.is_done() or (self.osim_model.istep >= self.spec.timestep_limit), {} ]
 
     def render(self, mode='human', close=False):
@@ -496,8 +496,18 @@ class L2RunEnvHER(L2RunEnv):  # semueller
         return np.array(super(L2RunEnvHER, self).get_observation()).flatten()
 
     def _is_success(self, achieved_goal, desired_goal):  # necessary?
-        return (self.pose_metric(achieved_goal, desired_goal) <= self.tolerance).astype(np.float32)
+        if achieved_goal is None:
+            raise ValueError("{}: achieved_goal was None".format(self.__class__))
+        if desired_goal is None:
+            return np.float32(0)
+        return np.float32((self.pose_metric(achieved_goal, desired_goal) <= self.tolerance))
 
+    def step(self, action, project = True):
+        obs, r, d, _ = super(L2RunEnvHER, self).step(action, project)
+        info = {
+            'is_success': self._is_success(obs['achieved_goal'], self.goal)
+        }
+        return obs, r, d, info
 
 def rect(row):
     r = row[0]
